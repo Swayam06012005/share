@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SendAnywhere Lite - P2P File Sharing</title>
+  <script src="webtorrent.min.js"></script>
+  <style>
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background: #f7f9fc;
+      color: #333;
+      padding: 2em;
+      max-width: 800px;
+      margin: auto;
+    }
+    h1 {
+      text-align: center;
+      color: #007BFF;
+    }
+    .card {
+      background: white;
+      border-radius: 12px;
+      padding: 1.5em;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.05);
+      margin-bottom: 2em;
+    }
+    input[type="file"], input[type="text"] {
+      padding: 0.6em;
+      font-size: 1em;
+      width: 100%;
+      margin-bottom: 1em;
+      border-radius: 8px;
+      border: 1px solid #ccc;
+    }
+    button {
+      background-color: #007BFF;
+      color: white;
+      padding: 0.7em 1.2em;
+      font-size: 1em;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+    button:hover {
+      background-color: #0056b3;
+    }
+    textarea {
+      width: 100%;
+      height: 100px;
+      margin-top: 1em;
+    }
+    .info {
+      font-size: 0.9em;
+      color: #555;
+      margin-top: 1em;
+    }
+    .highlight {
+      color: #28a745;
+    }
+  </style>
+</head>
+<body>
+  <h1>✨ SendAnywhere Lite (P2P)</h1>
+
+  <div class="card">
+    <h2>📤 Send a File</h2>
+    <input type="file" id="sendFile">
+    <button onclick="shareFile()">Generate Share Link</button>
+    <div id="fileInfo" class="info"></div>
+    <div id="sendLink" class="info"></div>
+  </div>
+
+  <div class="card">
+    <h2>📥 Receive a File</h2>
+    <input type="text" id="magnetLink" placeholder="Paste magnet link here">
+    <button onclick="downloadFile()">Download</button>
+    <div id="status" class="info"></div>
+  </div>
+
+  <script>
+    const client = new WebTorrent();
+
+    function shareFile() {
+      const fileInput = document.getElementById('sendFile');
+      const file = fileInput.files[0];
+      if (!file) {
+        alert("Please select a file first.");
+        return;
+      }
+
+      const fileSize = (file.size / 1024 / 1024).toFixed(2);
+      const extension = file.name.split('.').pop();
+      document.getElementById('fileInfo').innerHTML = `
+        <strong>Filename:</strong> ${file.name}<br>
+        <strong>Size:</strong> ${fileSize} MB<br>
+        <strong>Extension:</strong> .${extension}`;
+
+      client.seed(file, torrent => {
+        const link = torrent.magnetURI;
+        document.getElementById('sendLink').innerHTML = `
+          <strong>Share this magnet link:</strong><br>
+          <textarea readonly>${link}</textarea>`;
+      });
+    }
+
+    function downloadFile() {
+      const magnetURI = document.getElementById('magnetLink').value;
+      if (!magnetURI) {
+        alert("Please paste a magnet link.");
+        return;
+      }
+
+      document.getElementById('status').innerText = "Connecting to peer...";
+
+      const start = performance.now();
+
+      client.add(magnetURI, torrent => {
+        torrent.files.forEach(file => {
+          file.getBlobURL((err, url) => {
+            if (err) return console.error(err);
+
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = file.name;
+            a.textContent = `📥 Click to download: ${file.name}`;
+
+            const downloadTime = ((performance.now() - start) / 1000).toFixed(2);
+            const speedMbps = ((file.length * 8 / 1024 / 1024) / downloadTime).toFixed(2);
+
+            document.getElementById('status').innerHTML = `
+              <div>${a.outerHTML}</div>
+              <div class="info">
+                ⏱ Download time: ${downloadTime}s <br>
+                📡 Speed: <span class="highlight">${speedMbps} Mbps</span>
+              </div>
+            `;
+          });
+        });
+      });
+    }
+  </script>
+</body>
+</html>
