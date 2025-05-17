@@ -80,29 +80,37 @@
 
   <script>
     const client = new WebTorrent();
+function shareFile() {
+  const fileInput = document.getElementById('sendFile');
+  const file = fileInput.files[0];
+  if (!file) {
+    alert("Please select a file first.");
+    return;
+  }
 
-    function shareFile() {
-      const fileInput = document.getElementById('sendFile');
-      const file = fileInput.files[0];
-      if (!file) {
-        alert("Please select a file first.");
-        return;
-      }
+  const fileSizeMB = (file.size / 1024 / 1024).toFixed(2);
+  const extension = file.name.split('.').pop();
+  document.getElementById('fileInfo').innerHTML = `
+    <strong>Filename:</strong> ${file.name}<br>
+    <strong>Size:</strong> ${fileSizeMB} MB<br>
+    <strong>Extension:</strong> .${extension}`;
 
-      const fileSize = (file.size / 1024 / 1024).toFixed(2);
-      const extension = file.name.split('.').pop();
-      document.getElementById('fileInfo').innerHTML = `
-        <strong>Filename:</strong> ${file.name}<br>
-        <strong>Size:</strong> ${fileSize} MB<br>
-        <strong>Extension:</strong> .${extension}`;
+  const infoEl = document.getElementById('sendLink');
+  infoEl.innerHTML = "<em>Hashing file... Please wait, this may take time for large files.</em>";
 
-      client.seed(file, torrent => {
-        const link = torrent.magnetURI;
-        document.getElementById('sendLink').innerHTML = `
-          <strong>Share this magnet link:</strong><br>
-          <textarea readonly>${link}</textarea>`;
-      });
-    }
+  client.seed(file, torrent => {
+    const link = torrent.magnetURI;
+    infoEl.innerHTML = `
+      <strong>Share this magnet link:</strong><br>
+      <textarea readonly>${link}</textarea>`;
+  });
+
+  client.on('error', err => {
+    infoEl.innerHTML = `<span style="color:red;">Error: ${err.message}</span>`;
+    console.error(err);
+  });
+}
+
 
     function downloadFile() {
       const magnetURI = document.getElementById('magnetLink').value;
