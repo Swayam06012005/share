@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>SendAnywhere Lite - P2P File Sharing</title>
   <script src="https://cdn.jsdelivr.net/npm/webtorrent@latest/webtorrent.min.js"></script>
   <style>
@@ -58,6 +58,11 @@
     .highlight {
       color: #28a745;
     }
+    progress {
+      width: 100%;
+      margin-top: 0.5em;
+      height: 10px;
+    }
   </style>
 </head>
 <body>
@@ -65,10 +70,11 @@
 
   <div class="card">
     <h2>📤 Send a File</h2>
-    <input type="file" id="sendFile">
+    <input type="file" id="sendFile" onchange="clearMagnet()">
     <button onclick="shareFile()">Generate Share Link</button>
     <div id="fileInfo" class="info"></div>
     <div id="sendLink" class="info"></div>
+    <div id="peerStatus" class="info"></div>
   </div>
 
   <div class="card">
@@ -76,51 +82,70 @@
     <input type="text" id="magnetLink" placeholder="Paste magnet link here">
     <button onclick="downloadFile()">Download</button>
     <div id="status" class="info"></div>
+    <progress id="progressBar" value="0" max="100" style="display:none;"></progress>
   </div>
 
   <script>
     const client = new WebTorrent({
-  tracker: {
-    rtcConfig: {
-      iceServers: [
-        { urls: 'stun:stun.l.google.com:19302' },
-        { urls: 'stun:global.stun.twilio.com:3478?transport=udp' }
-      ]
+      tracker: {
+        rtcConfig: {
+          iceServers: [
+            { urls: 'stun:stun.l.google.com:19302' },
+            { urls: 'stun:global.stun.twilio.com:3478?transport=udp' }
+          ]
+        }
+      }
+    });
+
+    function clearMagnet() {
+      document.getElementById('sendLink').innerHTML = '';
+      document.getElementById('peerStatus').innerHTML = '';
+      document.getElementById('fileInfo').innerHTML = '';
     }
-  }
-});
 
-function shareFile() {
-  const fileInput = document.getElementById('sendFile');
-  const file = fileInput.files[0];
-  if (!file) {
-    alert("Please select a file first.");
-    return;
-  }
+    function shareFile() {
+      const fileInput = document.getElementById('sendFile');
+      const file = fileInput.files[0];
+      if (!file) {
+        alert("Please select a file first.");
+        return;
+      }
 
-  const fileSizeMB = (file.size / 1024 / 1024).toFixed(2);
-  const extension = file.name.split('.').pop();
-  document.getElementById('fileInfo').innerHTML = `
-    <strong>Filename:</strong> ${file.name}<br>
-    <strong>Size:</strong> ${fileSizeMB} MB<br>
-    <strong>Extension:</strong> .${extension}`;
+      const fileSizeMB = (file.size / 1024 / 1024).toFixed(2);
+      const extension = file.name.split('.').pop();
+      document.getElementById('fileInfo').innerHTML = `
+        <strong>Filename:</strong> ${file.name}<br>
+        <strong>Size:</strong> ${fileSizeMB} MB<br>
+        <strong>Extension:</strong> .${extension}`;
 
-  const infoEl = document.getElementById('sendLink');
-  infoEl.innerHTML = "<em>Hashing file... Please wait, this may take time for large files.</em>";
+      const infoEl = document.getElementById('sendLink');
+      infoEl.innerHTML = "<em>Hashing file... Please wait, this may take time for large files.</em>";
+      const peerEl = document.getElementById('peerStatus');
+      peerEl.innerHTML = "";
 
-  client.seed(file, torrent => {
-    const link = torrent.magnetURI;
-    infoEl.innerHTML = `
-      <strong>Share this magnet link:</strong><br>
-      <textarea readonly>${link}</textarea>`;
-  });
+      client.seed(file, {
+        announce: [
+          'wss://tracker.openwebtorrent.com',
+          'wss://tracker.btorrent.xyz',
+          'wss://tracker.fastcast.nz',
+          'wss://tracker.webtorrent.dev'
+        ]
+      }, torrent => {
+        const link = torrent.magnetURI;
+        infoEl.innerHTML = `
+          <strong>Share this magnet link:</strong><br>
+          <textarea readonly>${link}</textarea>`;
 
-  client.on('error', err => {
-    infoEl.innerHTML = `<span style="color:red;">Error: ${err.message}</span>`;
-    console.error(err);
-  });
-}
+        torrent.on('wire', (wire, addr) => {
+          peerEl.innerHTML = `<span class="highlight">✔ Connected to peer: ${addr}</span>`;
+        });
+      });
 
+      client.on('error', err => {
+        infoEl.innerHTML = `<span style="color:red;">Error: ${err.message}</span>`;
+        console.error(err);
+      });
+    }
 
     function downloadFile() {
       const magnetURI = document.getElementById('magnetLink').value;
@@ -129,7 +154,10 @@ function shareFile() {
         return;
       }
 
-      document.getElementById('status').innerText = "Connecting to peer...";
+      document.getElementById('status').innerText = "🔄 Connecting to peer...";
+      const progressBar = document.getElementById('progressBar');
+      progressBar.style.display = 'block';
+      progressBar.value = 0;
 
       const start = performance.now();
 
@@ -153,7 +181,18 @@ function shareFile() {
                 📡 Speed: <span class="highlight">${speedMbps} Mbps</span>
               </div>
             `;
+            progressBar.style.display = 'none';
           });
+        });
+
+        torrent.on('download', bytes => {
+          const progress = (torrent.downloaded / torrent.length * 100).toFixed(1);
+          progressBar.value = progress;
+          document.getElementById('status').innerText = `⏳ Downloading... ${progress}%`;
+        });
+
+        torrent.on('wire', (wire, addr) => {
+          console.log(`Connected to peer: ${addr}`);
         });
       });
     }
